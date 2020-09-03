@@ -43,6 +43,16 @@ func ParseTakeoutGZIP(reader io.Reader) (err error) {
 
         hash := ComputeHash(treader)
 
+        // TODO: handle photo type
+        // Takeout/Google Photos/2020-08-31/IMG_20200831_071508.jpg
+        // Calculate hash, size etc etc
+        // Save it in database
+
+        // TODO: Handle Instant Upload?
+        // Takeout/Google Photos/Instant Upload/IMG_20200831_073924.jpg
+
+        // TODO: Parse date created time based on file and dir name
+
         if e != "JSON" {
             totalFiles += 1
             _, ok := allHashes[hash]
@@ -52,6 +62,13 @@ func ParseTakeoutGZIP(reader io.Reader) (err error) {
                 allHashes[hash] = 1
             }
         }
+
+        // TODO: Handle JSON type separately
+        // Takeout/Google Photos/2020-08-31/IMG_20200831_081118.jpg.json
+        // Read EXIF metadata and save it in a take
+        // Directory and filename are unique enough to match with a photo
+        // trashed: true - delete this
+        // creationTime, modificationTime, geoData, geoDataExif, photoTakenTime
 
         // fmt.Printf("file=%s, h.Size=%d, hash=%s\n", h.Name, h.Size, hash)
     }
