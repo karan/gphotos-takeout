@@ -51,7 +51,11 @@ func ParseTakeoutGZIP(reader io.Reader) (err error) {
         // TODO: Handle Instant Upload?
         // Takeout/Google Photos/Instant Upload/IMG_20200831_073924.jpg
 
+        // TODO: save album names?
+
         // TODO: Parse date created time based on file and dir name
+
+        // Build a struct for all photo metadata, save in sqlite if hash isn't already present.
 
         if e != "JSON" {
             totalFiles += 1
@@ -69,6 +73,7 @@ func ParseTakeoutGZIP(reader io.Reader) (err error) {
         // Directory and filename are unique enough to match with a photo
         // trashed: true - delete this
         // creationTime, modificationTime, geoData, geoDataExif, photoTakenTime
+        // Build a struct for metadata metadata, save in sqlite if not already present.
 
         // fmt.Printf("file=%s, h.Size=%d, hash=%s\n", h.Name, h.Size, hash)
     }
