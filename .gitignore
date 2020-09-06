@@ -17,3 +17,4 @@
 *.env
 !template.env
 notes.txt
+*.db

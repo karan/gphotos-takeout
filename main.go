@@ -10,11 +10,12 @@ import (
     "log"
     "os"
     "path/filepath"
+    "strings"
 
-    _ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
+    "github.com/karan/gphotos-takeout/db"
+    "github.com/karan/gphotos-takeout/types"
+    "gorm.io/gorm"
 )
-
-// TODO: create a sqlite database
 
 func ComputeHash(reader io.Reader) string {
     sha := sha1.New()
@@ -24,50 +25,41 @@ func ComputeHash(reader io.Reader) string {
     return hex.EncodeToString(sha.Sum(nil))
 }
 
-func ParseTakeoutGZIP(reader io.Reader) (err error) {
+func ParseTakeoutGZIP(dbConn *gorm.DB, reader io.Reader) (err error) {
     greader, err := gzip.NewReader(reader)
     if err != nil {
         return
     }
 
-    // allExts := make(map[string]int)
-    allHashes := make(map[string]int)
     totalFiles := 0
     treader := tar.NewReader(greader)
+
     for h, err := treader.Next(); err == nil; h, err = treader.Next() {
+        p := types.Photo{}
+
         e := filepath.Ext(h.Name)
-        // _, ok := allExts[e]
-        // if ok {
-        //     allExts[e] += 1
-        // } else {
-        //     allExts[e] = 1
-        // }
+        if e == "JSON" {
+            continue
+        }
+        p.Extension = e
 
         hash := ComputeHash(treader)
+        p.Hash = hash
 
         // TODO: handle photo type
-        // Takeout/Google Photos/2020-08-31/IMG_20200831_071508.jpg
+        // Eg: Takeout/Google Photos/2020-08-31/IMG_20200831_071508.jpg
+        parts := strings.Split(h.Name, "/")
+        albumName := parts[2]
+
+        // TODO: regex group match over album name
+        // IF regex doens't match, save it in photo albumNames
+        p.AlbumNames = append(p.AlbumNames, albumName)
         // Calculate hash, size etc etc
-        // Save it in database
+        // TODO: save album names?
+        // TODO: Parse date created time based on file and dir name
 
         // TODO: Handle Instant Upload?
         // Takeout/Google Photos/Instant Upload/IMG_20200831_073924.jpg
-
-        // TODO: save album names?
-
-        // TODO: Parse date created time based on file and dir name
-
-        // Build a struct for all photo metadata, save in sqlite if hash isn't already present.
-
-        if e != "JSON" {
-            totalFiles += 1
-            _, ok := allHashes[hash]
-            if ok {
-                allHashes[hash] += 1
-            } else {
-                allHashes[hash] = 1
-            }
-        }
 
         // TODO: Handle JSON type separately
         // Takeout/Google Photos/2020-08-31/IMG_20200831_081118.jpg.json
@@ -80,7 +72,7 @@ func ParseTakeoutGZIP(reader io.Reader) (err error) {
         // fmt.Printf("file=%s, h.Size=%d, hash=%s\n", h.Name, h.Size, hash)
     }
 
-    fmt.Printf("totalFiles=%d, uniqueHashes=%d\n", totalFiles, len(allHashes))
+    fmt.Printf("totalFiles=%d\n", totalFiles)
 
     return
 }
@@ -91,9 +83,11 @@ func main() {
     defer log.Printf("==============================================")
 
     // Create Database
-    sqliteDatabase := CreateDB("database.db")
-    defer sqliteDatabase.Close()
-    CreateTable(sqliteDatabase)
+    dbConn, err := db.CreateDB("database.db")
+    if err != nil {
+        panic("failed to connect database")
+    }
+    db.InsertPhoto(dbConn, &types.Photo{})
 
     // Open and process tar ball
     // Usage: main takeout.tgz
@@ -107,5 +101,5 @@ func main() {
     }
     defer tarFile.Close()
 
-    ParseTakeoutGZIP(tarFile)
+    ParseTakeoutGZIP(dbConn, tarFile)
 }
