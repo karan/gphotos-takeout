@@ -10,6 +10,8 @@ import (
     "log"
     "os"
     "path/filepath"
+
+    _ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
 )
 
 // TODO: create a sqlite database
@@ -78,7 +80,7 @@ func ParseTakeoutGZIP(reader io.Reader) (err error) {
         // fmt.Printf("file=%s, h.Size=%d, hash=%s\n", h.Name, h.Size, hash)
     }
 
-    fmt.Printf("totalFiles=%d, uniqueHashes=%\n", totalFiles, len(allHashes))
+    fmt.Printf("totalFiles=%d, uniqueHashes=%d\n", totalFiles, len(allHashes))
 
     return
 }
@@ -88,9 +90,14 @@ func main() {
     log.Printf("==============================================")
     defer log.Printf("==============================================")
 
+    // Create Database
+    sqliteDatabase := CreateDB("database.db")
+    defer sqliteDatabase.Close()
+    CreateTable(sqliteDatabase)
+
+    // Open and process tar ball
     // Usage: main takeout.tgz
-    // TODO - use an actual flag parser.
-    // Likely, `main -i takeout.tgz -d path/to/db.sqlite`
+    // TODO - use an actual flag parser: `main -i takeout.tgz -d path/to/db.sqlite`
     tarPath := os.Args[1]
     fmt.Println(tarPath)
 
