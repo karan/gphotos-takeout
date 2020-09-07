@@ -8,16 +8,31 @@ import (
     "gorm.io/gorm"
 )
 
-func CreateDB(name string) (*gorm.DB, error) {
-    log.Println("creating db")
-    db, err := gorm.Open(sqlite.Open(name), &gorm.Config{
-        SkipDefaultTransaction: true,
-    })
-    log.Println("migrating db")
-    db.AutoMigrate(&types.Photo{})
-    return db, err
+type Connection struct {
+    dbConn *gorm.DB
 }
 
-func InsertPhoto(db *gorm.DB, photo *types.Photo) *gorm.DB {
-    return db.Create(&photo)
+func CreateDB(name string) (*Connection, error) {
+    log.Println("creating db")
+    var err error
+    dbConn, err := gorm.Open(sqlite.Open(name), &gorm.Config{
+        SkipDefaultTransaction: true,
+    })
+    if err != nil {
+        return nil, err
+    }
+    log.Println("migrating db")
+    dbConn.AutoMigrate(&types.Photo{})
+
+    return &Connection{dbConn: dbConn}, nil
+}
+
+func (c *Connection) FindPhoto(hash string) types.Photo {
+    var p types.Photo
+    c.dbConn.First(&p, hash)
+    return p
+}
+
+func (c *Connection) InsertPhoto(photo *types.Photo) {
+    c.dbConn.Save(photo)
 }

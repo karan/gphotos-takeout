@@ -10,11 +10,15 @@ import (
     "log"
     "os"
     "path/filepath"
+    "regexp"
     "strings"
 
     "github.com/karan/gphotos-takeout/db"
     "github.com/karan/gphotos-takeout/types"
-    "gorm.io/gorm"
+)
+
+var (
+    dateAlbumRegexp = regexp.MustCompile(`^([0-9]{4})-([0-9]{2})-([0-9]{2})$`)
 )
 
 func ComputeHash(reader io.Reader) string {
@@ -25,7 +29,51 @@ func ComputeHash(reader io.Reader) string {
     return hex.EncodeToString(sha.Sum(nil))
 }
 
-func ParseTakeoutGZIP(dbConn *gorm.DB, reader io.Reader) (err error) {
+func CreateOrUpdatePhoto(reader io.Reader, h *tar.Header, dbConn *db.Connection) *types.Photo {
+    p := types.Photo{}
+    log.Printf("File: %q", h.Name)
+
+    e := filepath.Ext(h.Name)
+    if e == ".json" {
+        // TODO: Handle JSON type separately
+        // Takeout/Google Photos/2020-08-31/IMG_20200831_081118.jpg.json
+        // Read EXIF metadata and save it in a take
+        // Directory and filename are unique enough to match with a photo
+        // trashed: true - delete this
+        // creationTime, modificationTime, geoData, geoDataExif, photoTakenTime
+        // Build a struct for metadata metadata, save in sqlite if not already present.
+        return nil
+    }
+
+    hash := ComputeHash(reader)
+
+    p = dbConn.FindPhoto(hash)
+    p.Extension = e
+
+    p.Hash = hash
+    p.SizeBytes = h.Size
+
+    // Eg: Takeout/Google Photos/2020-08-31/IMG_20200831_071508.jpg
+    parts := strings.Split(h.Name, "/")
+    p.Name = parts[len(parts)-1]
+    albumName := parts[2]
+    albumCapture := dateAlbumRegexp.FindStringSubmatch(albumName)
+
+    log.Printf("albumCapture=%+v", albumCapture)
+    if len(albumCapture) == 4 {
+        // Photo type (not a user-created album)
+        p.Year = albumCapture[1]
+        p.Month = albumCapture[2]
+        p.Day = albumCapture[3]
+    } else {
+        // Custom album
+        // TODO: Parse date created time based on file
+        p.Albums = append(p.Albums, types.Album{Name: albumName})
+    }
+    return &p
+}
+
+func ParseTakeoutGZIP(dbConn *db.Connection, reader io.Reader) (err error) {
     greader, err := gzip.NewReader(reader)
     if err != nil {
         return
@@ -35,41 +83,11 @@ func ParseTakeoutGZIP(dbConn *gorm.DB, reader io.Reader) (err error) {
     treader := tar.NewReader(greader)
 
     for h, err := treader.Next(); err == nil; h, err = treader.Next() {
-        p := types.Photo{}
-
-        e := filepath.Ext(h.Name)
-        if e == "JSON" {
-            continue
+        p := CreateOrUpdatePhoto(treader, h, dbConn)
+        if p != nil {
+            dbConn.InsertPhoto(p)
         }
-        p.Extension = e
-
-        hash := ComputeHash(treader)
-        p.Hash = hash
-
-        // TODO: handle photo type
-        // Eg: Takeout/Google Photos/2020-08-31/IMG_20200831_071508.jpg
-        parts := strings.Split(h.Name, "/")
-        albumName := parts[2]
-
-        // TODO: regex group match over album name
-        // IF regex doens't match, save it in photo albumNames
-        p.AlbumNames = append(p.AlbumNames, albumName)
-        // Calculate hash, size etc etc
-        // TODO: save album names?
-        // TODO: Parse date created time based on file and dir name
-
-        // TODO: Handle Instant Upload?
-        // Takeout/Google Photos/Instant Upload/IMG_20200831_073924.jpg
-
-        // TODO: Handle JSON type separately
-        // Takeout/Google Photos/2020-08-31/IMG_20200831_081118.jpg.json
-        // Read EXIF metadata and save it in a take
-        // Directory and filename are unique enough to match with a photo
-        // trashed: true - delete this
-        // creationTime, modificationTime, geoData, geoDataExif, photoTakenTime
-        // Build a struct for metadata metadata, save in sqlite if not already present.
-
-        // fmt.Printf("file=%s, h.Size=%d, hash=%s\n", h.Name, h.Size, hash)
+        totalFiles += 1
     }
 
     fmt.Printf("totalFiles=%d\n", totalFiles)
@@ -87,7 +105,6 @@ func main() {
     if err != nil {
         panic("failed to connect database")
     }
-    db.InsertPhoto(dbConn, &types.Photo{})
 
     // Open and process tar ball
     // Usage: main takeout.tgz
